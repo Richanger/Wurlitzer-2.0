@@ -127,6 +127,28 @@
     const inner = slideEl.querySelector('.flip-inner');
     if (inner) inner.classList.remove('is-flipped');
   }
+  function resetZoom(slideEl){
+    if (!slideEl) return;
+    const inner = slideEl.querySelector('.flip-inner');
+    if (inner) {
+      inner.style.setProperty('--zoom','1');
+      inner.style.setProperty('--tx','0px');
+      inner.style.setProperty('--ty','0px');
+    }
+  }
+  function setZoom(slideEl, scale){
+    if (!slideEl) return;
+    const inner = slideEl.querySelector('.flip-inner');
+    if (inner) inner.style.setProperty('--zoom', String(scale));
+  }
+  function setTranslation(slideEl, dx, dy){
+    if (!slideEl) return;
+    const inner = slideEl.querySelector('.flip-inner');
+    if (inner) {
+      inner.style.setProperty('--tx', `${dx}px`);
+      inner.style.setProperty('--ty', `${dy}px`);
+    }
+  }
   function updatePlatz(){
     const i = swiper.activeIndex;
     platzEl.textContent = `Platz ${rangeLabel(i)}`;
@@ -136,6 +158,7 @@
   swiper.on('afterInit', () => {
     updatePlatz();
     resetFlip(activeSlideEl());
+    resetZoom(activeSlideEl());
     // Ensure initial visible slide (and neighbors) load immediately
     if (swiper.lazy && typeof swiper.lazy.load === 'function') {
       swiper.lazy.load();
@@ -146,6 +169,7 @@
   // Slide change: reset flip, update Platz
   swiper.on('slideChange', () => {
     resetFlip(activeSlideEl());
+    resetZoom(activeSlideEl());
     updatePlatz();
     // Nudge lazy-loader in case transition didn't trigger
     if (swiper.lazy && typeof swiper.lazy.load === 'function') {
@@ -211,4 +235,95 @@
 
   // Expose for debugging
   window._swiper = swiper;
+
+  // Simple pinch-to-zoom for touch and double-tap to toggle zoom
+  let pinchStartDistance = null;
+  let pinchStartScale = 1;
+  let currentScale = 1;
+  let lastTapTime = 0;
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+  let panOffset = { x: 0, y: 0 };
+
+  function getDistance(t1, t2){
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  swiper.el.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      // Prevent swiper from stealing the gesture
+      swiper.allowTouchMove = false;
+      const [t1, t2] = e.touches;
+      pinchStartDistance = getDistance(t1, t2);
+      const sEl = activeSlideEl();
+      const inner = sEl?.querySelector('.flip-inner');
+      pinchStartScale = inner ? Number(getComputedStyle(inner).getPropertyValue('--zoom') || 1) : 1;
+      isPanning = false;
+    } else if (e.touches.length === 1 && currentScale > 1) {
+      // Begin panning when zoomed in
+      swiper.allowTouchMove = false;
+      const t = e.touches[0];
+      isPanning = true;
+      panStart = { x: t.clientX, y: t.clientY };
+      const sEl = activeSlideEl();
+      const inner = sEl?.querySelector('.flip-inner');
+      const cs = inner ? getComputedStyle(inner) : null;
+      panOffset = {
+        x: cs ? parseFloat(cs.getPropertyValue('--tx')) || 0 : 0,
+        y: cs ? parseFloat(cs.getPropertyValue('--ty')) || 0 : 0,
+      };
+    }
+  }, { passive: true });
+
+  swiper.el.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && pinchStartDistance) {
+      const [t1, t2] = e.touches;
+      const dist = getDistance(t1, t2);
+      const scale = Math.max(1, Math.min(2.5, pinchStartScale * (dist / pinchStartDistance)));
+      currentScale = scale;
+      setZoom(activeSlideEl(), scale);
+    } else if (isPanning && e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - panStart.x;
+      const dy = t.clientY - panStart.y;
+      // Limit panning based on zoom so you can't drag beyond edges too far
+      const sEl = activeSlideEl();
+      const inner = sEl?.querySelector('.flip-inner');
+      const cs = inner ? getComputedStyle(inner) : null;
+      const scale = cs ? Math.max(1, Number(cs.getPropertyValue('--zoom')) || 1) : 1;
+      const maxShift = (scale - 1) * 0.5 * sEl.clientWidth; // half of overflow width
+      const maxShiftY = (scale - 1) * 0.5 * sEl.clientHeight;
+      const nx = Math.max(-maxShift, Math.min(maxShift, panOffset.x + dx));
+      const ny = Math.max(-maxShiftY, Math.min(maxShiftY, panOffset.y + dy));
+      setTranslation(sEl, nx, ny);
+    }
+  }, { passive: true });
+
+  swiper.el.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) {
+      // End of gesture, restore swiper movement if not zoomed in
+      swiper.allowTouchMove = currentScale <= 1.01;
+      if (currentScale <= 1.01) currentScale = 1;
+      if (currentScale === 1) setZoom(activeSlideEl(), 1);
+      pinchStartDistance = null;
+      isPanning = false;
+    }
+  });
+
+  // Double-tap to toggle zoom (1x <-> 2x)
+  swiper.on('tap', (sw, e) => {
+    const now = Date.now();
+    if (now - lastTapTime < 280) {
+      const sEl = activeSlideEl();
+      const inner = sEl?.querySelector('.flip-inner');
+      const cur = inner ? Number(getComputedStyle(inner).getPropertyValue('--zoom') || 1) : 1;
+      const next = cur > 1 ? 1 : 2;
+      setZoom(sEl, next);
+      currentScale = next;
+      swiper.allowTouchMove = next === 1;
+    }
+    lastTapTime = now;
+  });
 })();
