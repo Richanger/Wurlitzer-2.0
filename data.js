@@ -11,7 +11,7 @@ window.albums = [
   { front: "bilder/10-front.webp", back: "bilder/10-back.webp", discs: 1 },
   { front: "bilder/11-front.webp", back : "bilder/11-back.webp", discs: 1 },
   { front: "bilder/12-front.webp", back: "bilder/12-back.webp", discs: 2 },
-  { front: "bilder/13-front.webp", back: "bilder/13-back.webp", discs: 2 },
+  { front: "bilder/13-front.webp", back: "bilder/13-back.webp", discs: 1 },
   { front: "bilder/14-front.webp", back: "bilder/14-back.webp", discs: 1 },
   { front: "bilder/15-front.webp", back: "bilder/15-back.webp", discs: 1 },
   { front: "bilder/16-front.webp", back: "bilder/16-back.webp", discs: 1 },
