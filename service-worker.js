@@ -1,10 +1,11 @@
 // service-worker.js
-const CACHE = 'jukebox-swiper-cache-v11';
+const CACHE = 'jukebox-swiper-cache-v12';
 const CORE = [
   './',
   './index.html',
   './app.js',
   './data.js',
+  './songs.json',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

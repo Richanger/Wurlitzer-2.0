@@ -16,6 +16,18 @@
   }
   window.albums = list;
 
+  let SONGS = [];
+  fetch('songs.json')
+    .then(r => r.json())
+    .then(d => {
+      SONGS = Array.isArray(d) ? d.map(x => ({
+        n: String(x?.n ?? x?.title ?? '').trim(),
+        albumIndex: Number(x?.albumIndex ?? -1),
+        disc: (x?.disc == null ? null : Number(x.disc))
+      })) : [];
+    })
+    .catch(() => { SONGS = []; });
+
   // Maps: slot -> album index, album -> start slot
   const slotToAlbum = new Array(MAX_SLOTS+1).fill(-1);
   const albumStartSlot = new Array(albums.length).fill(0);
@@ -231,6 +243,79 @@
   });
   jump.addEventListener('keydown', (e)=>{
     if (e.key === 'Enter') { e.preventDefault(); goBtn.click(); }
+  });
+
+  function norm(s){
+    return String(s || '')
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function fuzzyScore(query, candidate){
+    const q = norm(query);
+    const c = norm(candidate);
+    if (!q || !c) return 0;
+    if (q === c) return 3;
+    let score = 0;
+    if (c.includes(q) || q.includes(c)) score += 1;
+    const tq = new Set(q.split(' '));
+    const tc = new Set(c.split(' '));
+    let inter = 0; tq.forEach(t => { if (tc.has(t)) inter++; });
+    const union = new Set([...tq, ...tc]).size || 1;
+    score += inter / union;
+    if (c.startsWith(q)) score += 0.25;
+    return score;
+  }
+  function findBestSong(query){
+    let best = null; let bestScore = 0;
+    for (const s of SONGS){
+      const sc = fuzzyScore(query, s?.n || '');
+      if (sc > bestScore){ bestScore = sc; best = s; }
+    }
+    return bestScore > 0.15 ? best : null;
+  }
+  function computePlatzForSong(song){
+    const i = Number(song?.albumIndex ?? -1);
+    if (!(i >= 0) || !albums[i]) return { slot: null, approx: false };
+
+    const start = albumStartSlot[i] || 0;
+    const discsCount = Math.min(2, Math.max(1, Number(albums[i]?.discs || 1)));
+    const d = song?.disc;
+
+    if (d === 1) return { slot: start, approx: false };
+
+    if (d === 2){
+      if (discsCount >= 2) return { slot: Math.min(start + 1, MAX_SLOTS), approx: false };
+      return { slot: start, approx: true };
+    }
+
+    if (discsCount === 1) return { slot: start, approx: false };
+    return { slot: start, approx: true };
+  }
+  function showSongPlatz(){
+    const inp = document.getElementById('song');
+    const out = document.getElementById('song-platz');
+    if (!inp || !out) return;
+    const q = inp.value;
+    if (!q){ out.textContent = ''; return; }
+
+    const s = findBestSong(q);
+    if (!s){ out.textContent = 'Kein Treffer'; return; }
+
+    const res = computePlatzForSong(s);
+    if (!res.slot){ out.textContent = 'Unbekannt'; return; }
+
+    out.textContent = (res.approx ? '≈ Platz ' : 'Platz ') + res.slot;
+  }
+
+  const findSongBtn = document.getElementById('find-song');
+  if (findSongBtn) findSongBtn.addEventListener('click', showSongPlatz);
+  const songInput = document.getElementById('song');
+  if (songInput) songInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') showSongPlatz();
   });
 
   // Expose for debugging
